@@ -1,0 +1,129 @@
+#include <QTRSensors.h>
+
+#define Kp 0.6
+#define Kd 4
+#define MaxSpeed 255
+#define BaseSpeed 200
+
+#define NUM_SENSORS  8 
+
+#define BRAKEVCC 0
+#define CW   1
+#define CCW  2
+#define BRAKEGND 3
+#define CS_THRESHOLD 100
+
+#define speedturn 180
+
+#define PWM_MAX  255
+#define PWM_HALF 127
+
+int pinParar = 2;
+int inApin[2] = {7, 4};  
+int inBpin[2] = {8, 9}; 
+int pwmpin[2] = {5, 6}; 
+//int cspin[2] = {2, 3}; 
+int enpin[2] = {0, 1}; 
+
+QTRSensorsRC qtrrc((unsigned char[]) {13, 12, 11, 10, A2, A3, A4, A5} ,NUM_SENSORS, 2500, QTR_NO_EMITTER_PIN);
+unsigned int sensorValues[NUM_SENSORS];
+  
+void setup()
+{
+  pinMode(pinParar,INPUT);
+  for (int i=10;i<14;i++)
+  pinMode(i,INPUT);
+  for (int i=25;i<29;i++)
+  pinMode(i,INPUT);
+  
+  Serial.begin(9600);
+  Serial.print("SEGUILINEA");
+  for (int i=0; i<2; i++)
+  {
+    pinMode(inApin[i], OUTPUT);
+    pinMode(inBpin[i], OUTPUT);
+    pinMode(pwmpin[i], OUTPUT);
+  }
+
+  for (int i=0; i<2; i++)
+  {
+    digitalWrite(inApin[i], LOW);
+    digitalWrite(inBpin[i], LOW);
+  }
+
+  
+  delay(2000);
+  
+  int i;
+    qtrrc.calibrate();   
+    delay(20);
+  }
+  motorOff(0);
+  delay(3000);  
+}  
+
+int lastError = 0;
+unsigned int sensors[8];
+int position = qtrrc.readLine(sensors);
+
+void sigueLinea(){
+  position = qtrrc.readLine(sensors); 
+  int error = position - 3500;
+  int motorSpeed = Kp * error + Kd * (error - lastError);
+  lastError = error;
+  int rightMotorSpeed = BaseSpeed + motorSpeed;
+  int leftMotorSpeed = BaseSpeed - motorSpeed;
+  if (rightMotorSpeed > MaxSpeed ) rightMotorSpeed = MaxSpeed; 
+  if (leftMotorSpeed > MaxSpeed ) leftMotorSpeed = MaxSpeed; 
+  if (rightMotorSpeed < 0) rightMotorSpeed = 0;    
+  if (leftMotorSpeed < 0) leftMotorSpeed = 0;
+  motorGo(0, CW, leftMotorSpeed);
+  motorGo(1, CCW, rightMotorSpeed); 
+}
+
+void loop()
+{
+  int banderaParar = digitalRead(pinParar);
+  if (banderaParar){
+    Serial.print("parado");
+    motorGo(0, CW, 0);
+    motorGo(1, CCW, 0);
+    lastError = 0;
+  } 
+  else{
+    Serial.print("siguiendo");
+    sigueLinea(); 
+  }
+    
+}
+  
+
+void motorGo(uint8_t motor, uint8_t direct, uint8_t pwm)
+{
+  if (motor <= 1)
+  {
+    if (direct <=4)
+    {
+      if (direct <=1)
+        digitalWrite(inApin[motor], HIGH);
+      else
+        digitalWrite(inApin[motor], LOW);
+      if ((direct==0)||(direct==2))
+        digitalWrite(inBpin[motor], HIGH);
+      else
+        digitalWrite(inBpin[motor], LOW);
+
+      analogWrite(pwmpin[motor], pwm);
+    }
+  }
+}
+
+void motorOff(int motor)
+{
+  for (int i=0; i<2; i++)
+  {
+    digitalWrite(inApin[i], LOW);
+    digitalWrite(inBpin[i], LOW);
+  }
+  analogWrite(pwmpin[motor], 0);
+}
