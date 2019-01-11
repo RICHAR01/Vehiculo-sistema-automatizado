@@ -1,0 +1,146 @@
+#include <Arduino.h>
+#include <SPI.h>
+#include <MFRC522.h>
+#include "BasicStepperDriver.h"
+
+
+
+#define SS_PIN 10  
+#define RST_PIN 9 
+
+MFRC522 mfrc522(SS_PIN, RST_PIN);        
+MFRC522::MIFARE_Key key;
+
+const byte producto0Pin = A3;
+const byte producto1Pin = A2;
+const byte sensorSharp = A6;
+bool secuencia1=1, secuencia2;
+const byte switchRecolectar = A0;
+const byte switchColocar = A1;
+const int pinRecolectar = 2;
+const int pinColocar = 3;
+
+int banderaLeyo = 0;
+
+void setup() {
+  Serial.begin(38400);
+  
+  pinMode(switchRecolectar, INPUT);
+  digitalWrite(switchRecolectar, HIGH);
+  pinMode(switchColocar, INPUT);
+  digitalWrite(switchColocar, HIGH);
+  
+  //Serial.print("hola");
+  //serial2.begin(38400);
+  SPI.begin();               
+  mfrc522.PCD_Init();       
+  for (byte i = 0; i < 6; i++) {
+    key.keyByte[i] = 0xFF;
+  }
+}
+
+char compareBlock[16];
+char blockProducto0[16] = "P000000000000000";
+char blockProducto1[16] = "P000000000000001";
+char blockProducto2[16] = "P000000000000002";
+  
+int block=2;
+int producto = 0;
+char readbackblock[18];
+
+boolean compareArray(char readblk[], char refblk[]){
+  int cont;
+    for (int j=0 ; j<16 ; j++)
+      {
+      if(readblk[j] == refblk[j])
+      cont++;
+
+      else
+        return false;
+      }        
+      if(cont == 16)
+        return true;
+      else
+        return false;    
+}
+
+void deleteArray(char arr[]){
+    for (int j=0 ; j<16 ; j++)
+    arr[j]=0;  
+}
+
+int leer_RFID(){
+  banderaLeyo = 0;
+  digitalWrite(producto0Pin,LOW);
+  digitalWrite(producto1Pin,LOW);
+  
+  if ( ! mfrc522.PICC_IsNewCardPresent()) {
+    return;
+  }
+
+  // Select one of the cards
+  if ( ! mfrc522.PICC_ReadCardSerial()) {
+    return;
+  }      
+  readBlock(block, readbackblock);
+  
+  for (int j=0 ; j<16 ; j++)
+  {
+  compareBlock[j] = readbackblock[j];
+
+  }
+  int cont;
+  
+  
+  if(compareArray(compareBlock, blockProducto0))
+  {
+  producto = 0;
+  banderaLeyo = 1;
+  }
+ 
+  if(compareArray(compareBlock, blockProducto1))
+  {
+  producto = 1;
+  banderaLeyo = 1;
+  }
+  
+  delay(200);
+  
+  // Halt PICC
+  mfrc522.PICC_HaltA();
+  // Stop encryption on PCD
+  mfrc522.PCD_StopCrypto1();
+}
+
+int banderaRecolectar, banderaColocar;
+
+void loop(){
+  //Lee sensor recolectar
+  do{
+    banderaRecolectar = digitalRead(switchRecolectar);
+    if(banderaRecolectar){ 
+      Serial.write('1'); //Mensaje que se pare
+      do{
+      leer_RFID(); // Quédate hasta que leas un producto
+      }while(!banderaLeyo);
+    }
+  }while(banderaRecolectar==0);
+  Serial.write('2'); //Mensaje para que recolecte
+  delay(100);
+  //Serial.write(' ');
+  //Lee sensor colocar
+  do{
+    banderaColocar = digitalRead(switchColocar);
+    if(banderaColocar){ //Al presionar el switch de colocar
+      if(producto == 0){
+        Serial.write('3'); // Manda mensaje subir producto 1
+        delay(100);
+        //Serial.write(' ');
+      }
+      if(producto == 1){
+        Serial.write('4'); // Manda mensaje subir producto 2
+        delay(100);
+      }
+    }
+  }while(banderaColocar==0);
+}
